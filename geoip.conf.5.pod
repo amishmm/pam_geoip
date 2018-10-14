@@ -1,0 +1,133 @@
+
+=encoding utf8
+
+=cut
+
+$Id$
+
+=head1 NAME
+
+geoip.conf - config file for the PAM module pam_geoip
+
+=head1 DESCRIPTION
+
+The configuration file (by default F</etc/security/geoip.conf>) contains lines
+of four items: domain, service, action and location. For a description of
+these, see below.
+
+When the service specific configuration file
+(F</etc/security/geoip.SERVICE.conf>) is used, the I<service> column must
+not be present. If this file is present, the default file is not used, even
+if present on the command line as C<system_file=/file/name>.
+
+If you need to match on city names containing non L<ascii(7)> characters
+(like C<DE, Köln> or C<SE, Växjö>), you can set the character set to use
+in the module's arguments: C<iso-8859-1> or C<UTF-8> (the default).
+
+Any (sub-)item except for I<action> or the distance matching can use a single
+asterisk (C<*>) to match any value.
+
+=over 4
+
+=item domain
+
+A user name, group name (prefixed by C<@>) or C<*> for any user / group
+
+=item service
+
+A list of services (or C<*>) separated by C<,> (NO spaces allowed)
+
+=item action
+
+C<allow>, C<deny> or C<ignore>. This is what will be returned to PAM if the
+location matches:
+
+=over 2
+
+=item allow
+
+I<PAM_ALLOW>
+
+=item deny
+
+I<PAM_PERM_DENIED>
+
+=item ignore
+
+I<PAM_IGNORE>
+
+=back
+
+=item location
+
+GeoIP location, separated by C<;>. This can be:
+
+=over 2
+
+=item *
+
+a country code (uppercased, two characters), C<*> or C<UNKNOWN>
+
+=item *
+
+a country code like above and C<,> and a city name (or C<*>). When using a
+GeoIP country database, this part must be C<*>, i.e. the full entry looks
+like C<DE, *>.
+
+=item *
+
+a distance from a given point, e.g.
+
+ 50.0 { 51.513888, 7.465277 }
+
+This is not available when using a GeoIP country database.
+
+=back
+
+=back
+
+The location part can use spaces, but note: city names must be given as in
+the GeoIP database, i.e. S<C<Mountain View>>, NOT S<C<Moutain  View>> or
+C<MountainView>.
+
+The distance is measured in kilometers. In the above example we match
+a circle of 100 km diameter around Dortmund, Germany (51° 30′ 50″ north,
+7° 27′ 50″ east (51.513888888889, 7.465277777777876)). Coordinates west
+and south are given as negative values. Values must be given in decimal.
+
+=head1 EXAMPLE
+
+ #
+ # /etc/security/geoip.conf - config for pam_geoip.so
+ #
+
+ #<domain>   <service>  <action>  <location>
+ @wheel      sshd       allow     DE,* ; SE , Nybro
+ @wheel      sshd       allow     SE, Emmaboda; SE,Växjö
+ someuser    sshd       allow     50.0 { 51.513888, 7.465277 }
+ someuser    sshd       allow     DE,Köln
+ otheruser   sshd       allow     SE,Umeå; DK, København
+ *           *          ignore    UNKNOWN
+ *           *          deny      *
+ ## END
+
+or the same as F</etc/security/geoip.sshd.conf>:
+
+ #<domain>     <action>  <location>
+ @wheel        allow     DE,* ; SE , Nybro
+ @wheel        allow     SE, Emmaboda; SE,Växjö
+ someuser      allow     50.0 { 51.513888, 7.465277 }
+ someuser      allow     DE,Köln
+ otheruser     allow     SE,Umeå; DK, København
+ *             ignore    UNKNOWN
+ *             deny      *
+
+=head1 SEE ALSO
+
+L<pam_geoip(8)>, L<pam_access(8)>, L<pam.d(5)>, L<pam(7)>
+
+=head1 AUTHOR
+
+Hanno Hecker C<E<lt>vetinari@ankh-morp.orgE<gt>>
+
+=cut

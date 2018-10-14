@@ -1,0 +1,8 @@
+TODO:
+=====
+* ipv6 (more) testing, (ipv6 city database in beta @ maxmind)
+* test w/ country DB
+
+NOT TODO:
+=========
+* match hostnames / IPs, pam_access can do this

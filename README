@@ -1,0 +1,31 @@
+$Id$
+
+pam_geoip - GeoIP account management module for (Linux-)PAM
+
+This PAM module provides GeoIP checking for logins. The user can be allowed
+or denied based on the location of the originating IP address. This is
+similar to pam_access(8), but uses a GeoIP City or GeoIP Country database
+instead of host name / IP matching.
+
+The matching in pam_geoip is done on given country and city names or on
+distance from a given location. With a GeoIP Country database only matches
+of the originating country are possible.
+
+This PAM module provides the "account" hook only. To use this module, add a
+line like (optional parts in square brackets)
+
+  account required pam_geoip.so [system_file=file] [geoip_db=file] \
+	[charset=name] [action=name] [debug] [geoip6_db=file] [use_v6=1] \
+	[v6_first=1]
+
+to the relevant files in /etc/pam.d/ and configure your
+/etc/security/geoip.conf and/or /etc/security/geoip.SERVICE.conf.
+
+Requirements:
+
+Debian (lenny, squeeze, sid [Linux, kFreeBSD]):
+  building: libgeoip-dev, libpam0g-dev, perl (pod2man)
+  running: libgeoip1, libpam0g, libpam-{modules,runtime}, a GeoIP City
+     database, see http://www.maxmind.com/en/city or a GeoIP Country
+     database, see http://www.maxmind.com/en/country
+  IPv6: libgeoip1 >= 1.4.8, a Geo(Lite) City / Country IPv6 database

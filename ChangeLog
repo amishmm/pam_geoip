@@ -1,0 +1,11 @@
+1.1 (2013-02-16):
+  - split pam_geoip.c into several files
+  - add possibility to use country databases
+  - output in syslog changed, it now includes the matching entry and the
+    remote host (w/ debug off)
+
+1.0 (2012-12-26)
+  - add IPv6 support, libgeoip >= 1.4.8 is required for this
+
+0.9 (2011-04-22)
+  - initial public release
