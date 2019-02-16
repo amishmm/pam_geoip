@@ -12,14 +12,14 @@ pam_geoip - GeoIP account management module for (Linux-)PAM
 =head1 SYNOPSIS
 
  account required pam_geoip.so [system_file=file] [geoip_db=file]
-        [action=name] [debug] [geoip6_db=file]
-	[use_v6=1] [v6_first=1]
+        [action=name] [debug]
 
 =head1 DESCRIPTION
 
 The B<pam_geoip> module provides a check if the remote logged in user is
 logged in from a given location. This is similar to L<pam_access(8)>, but
-uses a GeoIP City or GeoIP Country database instead of host name / IP matching.
+uses a GeoIP2 City or GeoIP2 Country database instead of
+host name / IP matching.
 
 The matching is done on given country and city names or on distance from
 a given location. With a country database only matches of the countries are
@@ -27,16 +27,9 @@ possible.
 
 This PAM module provides the I<account> hook only.
 
-If an IP is not found in the GeoIP database, the location to match against
+If an IP is not found in the GeoIP2 database, the location to match against
 is set to C<UNKNOWN, *>, no distance matching is possible for these,
 of course.
-
-B<NOTE>: I<pam> just receives a hostname. When trying to find an IP for
-this name the modules tries IPv4 first, then IPv6. This can be changed
-with the C<v6_first=1> switch.
-
-IPv6 support is only available with geoip v1.4.8 or greater, and is has to
-be enabled by using the C<use_v6=1> switch.
 
 If a file named F</etc/security/geoip.SERVICE.conf> (with SERVICE being the
 name of the PAM service) can be opened, this is used instead of the default
@@ -76,26 +69,14 @@ B<NOTE>: when a file F</etc/security/geoip.SERVICE.conf> file is present, this
 switch is ignored (with C<SERVICE> being the name of the PAM service, e.g.
 C<sshd>).
 
-=item geoip_db=/path/to/GeoIPCity.dat
+=item geoip_db=/path/to/GeoLite2-City.mmdb
 
-The GeoIP database to use. Default: F</usr/local/share/GeoIP/GeoIPCity.dat>.
-This must be a C<GeoIP City Edition> or a C<GeoIP Country Edition> file, see
-L<http://www.maxmind.com/en/city>, L<http://www.maxmind.com/en/city> and
-L<http://dev.maxmind.com/geoip/geolite> for more information.
+The GeoIP2 database to use. Default: F</usr/share/GeoIP/GeoLite2-City.mmdb>.
+This must be a C<GeoIP2 City Edition> or a C<GeoIP2 Country Edition> file, see
+L<https://www.maxmind.com/en/geoip2-databases> and
+L<https://dev.maxmind.com/geoip/geoip2/geolite2/> for more information.
 
-=item geoip6_db=/path/to/GeoIPCityv6.dat
-
-The GeoIP database to use. Default: F</usr/local/share/GeoIP/GeoIPCityv6.dat>.
-This must be a C<GeoIP City Edition IPv6> or a C<GeoIP Country Edition IPv6>
-file, see above for more information.
-
-=item use_v6=1
-
-Use IPv6 DB.
-
-=item v6_first=1
-
-Try resolving as IPv6 before trying as IPv4 hostname.
+The database can contain IPv4 or IPv6 addresses or both.
 
 =item action=ACTION
 
@@ -133,6 +114,7 @@ L<geoip.conf(5)>, L<pam_access(8)>, L<pam.d(5)>, L<pam(7)>
 
 =head1 AUTHOR
 
-Hanno Hecker C<E<lt>vetinari@ankh-morp.orgE<gt>>
+Amish - GeoIP2
+Hanno Hecker - Legacy GeoIP C<E<lt>vetinari@ankh-morp.orgE<gt>>
 
 =cut

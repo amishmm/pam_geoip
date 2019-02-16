@@ -44,7 +44,6 @@
 #define SYSTEM_FILE  "/etc/security/geoip.conf"
 #define SERVICE_FILE "/etc/security/geoip.%s.conf"
 #define GEOIPDB_FILE "/usr/share/GeoIP/GeoLite2-City.mmdb"
-#define GEOIP6DB_FILE "/usr/share/GeoIP/GeoLite2-City.mmdb"
 
 /* GeoIP locations in geoip.conf */
 struct locations {
@@ -60,12 +59,9 @@ struct locations {
 struct options {
     char *system_file;
     char *geoip_db;
-    char *geoip6_db;
     char *service_file; /* not on cmd line */
     int  by_service;    /* if service_file can be opened this is true */
     int  action;
-    int  use_v6;
-    int  v6_first;
     int  is_city_db;
     int  debug;
 };

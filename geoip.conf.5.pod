@@ -128,6 +128,7 @@ L<pam_geoip(8)>, L<pam_access(8)>, L<pam.d(5)>, L<pam(7)>
 
 =head1 AUTHOR
 
-Hanno Hecker C<E<lt>vetinari@ankh-morp.orgE<gt>>
+Amish - GeoIP2
+Hanno Hecker - Legacy GeoIP C<E<lt>vetinari@ankh-morp.orgE<gt>>
 
 =cut

@@ -24,16 +24,13 @@ void _parse_args(pam_handle_t *pamh,
                 opts->geoip_db = strndup(argv[i]+9, PATH_MAX);
         }
         else if (strncmp(argv[i], "v6_first=", 9) == 0) {
-            if (argv[i][9])
-                opts->v6_first = atoi(argv[i]+9);
+            pam_syslog(pamh, LOG_WARNING, "v6_first is not used anymore. geoip_db should support IPv6");
         }
         else if (strncmp(argv[i], "use_v6=", 7) == 0) {
-            if (argv[i][7])
-                opts->use_v6 = atoi(argv[i]+7);
+            pam_syslog(pamh, LOG_WARNING, "use_v6 is not used anymore. geoip_db should support IPv6");
         }
         else if (strncmp(argv[i], "geoip6_db=", 10) == 0) {
-            if (argv[i][10])
-                opts->geoip6_db = strndup(argv[i]+10, PATH_MAX);
+            pam_syslog(pamh, LOG_WARNING, "geoip6_db is not used anymore. geoip_db should support IPv6");
         }
         else if (strncmp(argv[i], "charset=", 8) == 0) {
             pam_syslog(pamh, LOG_WARNING, "charset is not used in GeoIP2 API");

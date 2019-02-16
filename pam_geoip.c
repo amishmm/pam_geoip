@@ -5,7 +5,8 @@
  *
  */
 /*
- * Copyright (c) 2010-2012 Hanno Hecker <vetinari@ankh-morp.org>
+ * Copyright (c) 2019 Amish - GeoIP2 support
+ * Copyright (c) 2010-2012 Hanno Hecker - Legacy GeoIP <vetinari@ankh-morp.org>
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -64,8 +65,6 @@ free_opts(struct options *opts) {
         free(opts->service_file);
     if (opts->geoip_db)
         free(opts->geoip_db);
-    if (opts->geoip6_db)
-        free(opts->geoip6_db);
     free(opts);
 }
 
@@ -82,13 +81,10 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
     char *srv;             /* PAM service we're running as */
     char buf[LINE_LENGTH];
     int retval, action;
-    int is_v6 = 0;
     struct locations *geo;
     const char *gi_type;
 
     MMDB_s       gi;
-    MMDB_s       gi6;
-    int is_city6_db   = 0;
     MMDB_lookup_result_s rec;
     MMDB_entry_data_s entry_data;
     int gai_error, mmdb_error;
@@ -104,9 +100,6 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
     opts->service_file = NULL;
     opts->by_service   = 0;
     opts->geoip_db     = NULL;
-    opts->use_v6       = 0;
-    opts->v6_first     = 0;
-    opts->geoip6_db    = NULL;
     opts->is_city_db   = 0;
 
     geo = malloc(sizeof(struct locations));
@@ -136,15 +129,6 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
         opts->geoip_db = strdup(GEOIPDB_FILE);
     if (opts->geoip_db == NULL) {
         pam_syslog(pamh, LOG_CRIT, "malloc error 'opts->geoip_db': %m");
-        free_opts(opts);
-        free_locations(geo);
-        return PAM_SERVICE_ERR;
-    }
-
-    if (opts->geoip6_db == NULL)
-        opts->geoip6_db = strdup(GEOIP6DB_FILE);
-    if (opts->geoip6_db == NULL) {
-        pam_syslog(pamh, LOG_CRIT, "malloc error 'opts->geoip6_db': %m");
         free_opts(opts);
         free_locations(geo);
         return PAM_SERVICE_ERR;
@@ -203,10 +187,12 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
         return PAM_SERVICE_ERR;
     }
     gi_type = gi.metadata.database_type;
-    if (opts->debug)
+    if (opts->debug) {
         pam_syslog(pamh, LOG_DEBUG, "GeoIP database type: %s", gi_type);
+        pam_syslog(pamh, LOG_DEBUG, "GeoIP IP version: %d", gi.metadata.ip_version);
+    }
     if (gi_type == NULL || (strstr(gi_type, "Country") == NULL && strstr(gi_type, "City") == NULL)) {
-        pam_syslog(pamh, LOG_CRIT, "unsupported GeoIP DB type `%s' found", gi_type);
+        pam_syslog(pamh, LOG_CRIT, "Not a City or Country DB. Reported GeoIP DB type = %s", gi_type);
         MMDB_close(&gi);
         free_opts(opts);
         free_locations(geo);
@@ -214,68 +200,10 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
     }
     opts->is_city_db = strstr(gi_type, "City") ? 1 : 0;
     if (opts->debug)
-        pam_syslog(pamh, LOG_DEBUG, "GeoIP DB is City: %s",
+        pam_syslog(pamh, LOG_DEBUG, "GeoIP DB is City DB: %s",
                                         opts->is_city_db ? "yes" : "no");
 
-    if (opts->use_v6) {
-        retval = MMDB_open(opts->geoip6_db, MMDB_MODE_MMAP, &gi6);
-        if (retval != MMDB_SUCCESS) {
-            pam_syslog(pamh, LOG_CRIT,
-                            "failed to open geoip6 db (%s - %s): %m", opts->geoip6_db, MMDB_strerror(retval));
-            MMDB_close(&gi);
-            free_opts(opts);
-            free_locations(geo);
-            return PAM_SERVICE_ERR;
-        }
-        gi_type = gi6.metadata.database_type;
-        if (opts->debug)
-            pam_syslog(pamh, LOG_DEBUG, "GeoIP6 database type: %s", gi_type);
-        if (gi_type == NULL || (strstr(gi_type, "Country") == NULL && strstr(gi_type, "City") == NULL)) {
-            pam_syslog(pamh, LOG_CRIT, "unsupported GeoIP6 DB type `%s' found", gi_type);
-            MMDB_close(&gi);
-            MMDB_close(&gi6);
-            free_opts(opts);
-            free_locations(geo);
-            return PAM_SERVICE_ERR;
-        }
-        is_city6_db = strstr(gi_type, "City") ? 1 : 0;
-        if (opts->debug)
-            pam_syslog(pamh, LOG_DEBUG, "GeoIP6 DB is City v6: %s",
-                is_city6_db ? "yes" : "no");
-
-        if (opts->is_city_db != is_city6_db) {
-            pam_syslog(pamh, LOG_CRIT, "IPv4 DB type is not the same as IPv6 (City or Country)");
-            MMDB_close(&gi);
-            MMDB_close(&gi6);
-            free_opts(opts);
-            free_locations(geo);
-            return PAM_SERVICE_ERR;
-        }
-
-        if (opts->v6_first) {
-            rec = MMDB_lookup_string(&gi6, rhost, &gai_error, &mmdb_error);
-            if (gai_error || mmdb_error != MMDB_SUCCESS || !rec.found_entry) {
-                if (opts->debug)
-                    pam_syslog(pamh, LOG_DEBUG, "no IPv6 record for %s, trying IPv4", rhost);
-                rec = MMDB_lookup_string(&gi, rhost, &gai_error, &mmdb_error);
-            }
-            else
-                is_v6 = 1;
-        }
-        else {
-            rec = MMDB_lookup_string(&gi, rhost, &gai_error, &mmdb_error);
-            if (gai_error || mmdb_error != MMDB_SUCCESS || !rec.found_entry) {
-                if (opts->debug)
-                    pam_syslog(pamh, LOG_DEBUG, "no IPv4 record for %s, trying IPv6", rhost);
-                rec = MMDB_lookup_string(&gi6, rhost, &gai_error, &mmdb_error);
-                if (!gai_error && mmdb_error == MMDB_SUCCESS && rec.found_entry)
-                    is_v6 = 1;
-            }
-        }
-    }
-    else
-        rec = MMDB_lookup_string(&gi, rhost, &gai_error, &mmdb_error);
-
+    rec = MMDB_lookup_string(&gi, rhost, &gai_error, &mmdb_error);
     if (gai_error || mmdb_error != MMDB_SUCCESS || !rec.found_entry) {
         pam_syslog(pamh, LOG_INFO, "no record detected for %s, setting GeoIP to 'UNKNOWN,*'", rhost);
         geo->city    = strdup("*");
@@ -308,7 +236,6 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
     }
 
     MMDB_close(&gi);
-    MMDB_close(&gi6);
 
     if (geo->city == NULL || geo->country == NULL) {
         pam_syslog(pamh, LOG_CRIT, "malloc error 'geo->{city,country}': %m");
@@ -394,16 +321,16 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
 
     switch (action) {
         case PAM_SUCCESS:
-            pam_syslog(pamh, LOG_DEBUG, "location %s allowed for user %s from %s (IPv%d)", location, username, rhost, is_v6 ? 6 : 4);
+            pam_syslog(pamh, LOG_DEBUG, "location %s allowed for user %s from %s", location, username, rhost);
             break;
         case PAM_PERM_DENIED:
-            pam_syslog(pamh, LOG_DEBUG, "location %s denied for user %s from %s (IPv%d)", location, username, rhost, is_v6 ? 6 : 4);
+            pam_syslog(pamh, LOG_DEBUG, "location %s denied for user %s from %s", location, username, rhost);
             break;
         case PAM_IGNORE:
-            pam_syslog(pamh, LOG_DEBUG, "location %s ignored for user %s from %s (IPv%d)", location, username, rhost, is_v6 ? 6 : 4);
+            pam_syslog(pamh, LOG_DEBUG, "location %s ignored for user %s from %s", location, username, rhost);
             break;
         default: /* should not happen */
-            pam_syslog(pamh, LOG_DEBUG, "location status: %d, IPv%d", action, is_v6 ? 6 : 4);
+            pam_syslog(pamh, LOG_DEBUG, "location status: %d for user %s from %s", action, username, rhost);
             break;
     };
     free_opts(opts);
