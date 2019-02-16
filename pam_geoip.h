@@ -22,8 +22,6 @@
 
 #include <maxminddb.h>
 
-#include "config.h"
-
 #define LINE_LENGTH 4095
 
 #define MASK_NO_MASK  -1

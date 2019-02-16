@@ -13,7 +13,7 @@ CCFLAGS=-Wall
 PAM_LIB_DIR=$(DESTDIR)/lib/$(MULTIARCH)/security
 INSTALL=/usr/bin/install
 
-all: config.h pam_geoip.so doc
+all: pam_geoip.so doc
 
 doc: $(MANPAGES_POD) $(MANPAGES) 
 
@@ -29,12 +29,8 @@ $(OBJECTS): $(C_FILES)
 pam_geoip.so: $(OBJECTS)
 	$(CC) $(CCFLAGS) $(LDFLAGS) -o $@ $(OBJECTS)
 
-config.h:
-	sh make_config_h.sh
-
 clean:
 	rm -f $(MANPAGES)
-	rm -f config.h
 	rm -f $(OBJECTS) $(MODULE) core *~
 
 install: $(MODULE)
