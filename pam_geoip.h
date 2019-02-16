@@ -39,6 +39,10 @@
 # define PATH_MAX 1024
 #endif /* PATH_MAX */
 
+#ifndef LANG_MAX
+# define LANG_MAX 128
+#endif /* LANG_MAX */
+
 #define SYSTEM_FILE  "/etc/security/geoip.conf"
 #define SERVICE_FILE "/etc/security/geoip.%s.conf"
 #define GEOIPDB_FILE "/usr/share/GeoIP/GeoLite2-City.mmdb"
@@ -62,6 +66,7 @@ struct options {
     int  action;
     int  is_city_db;
     int  debug;
+    char *language;
 };
 
 extern struct locations *

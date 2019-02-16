@@ -15,7 +15,7 @@ This PAM module provides the "account" hook only. To use this module, add a
 line like (optional parts in square brackets)
 
   account required pam_geoip.so [system_file=file] [geoip_db=file] \
-	[action=name] [debug]
+	[action=name] [language=name] [debug]
 
 to the relevant files in /etc/pam.d/ and configure your
 /etc/security/geoip.conf and/or /etc/security/geoip.SERVICE.conf.

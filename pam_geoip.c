@@ -65,6 +65,8 @@ free_opts(struct options *opts) {
         free(opts->service_file);
     if (opts->geoip_db)
         free(opts->geoip_db);
+    if (opts->language)
+        free(opts->language);
     free(opts);
 }
 
@@ -101,6 +103,7 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
     opts->by_service   = 0;
     opts->geoip_db     = NULL;
     opts->is_city_db   = 0;
+    opts->language     = NULL;
 
     geo = malloc(sizeof(struct locations));
     if (geo == NULL) {
@@ -133,6 +136,17 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
         free_locations(geo);
         return PAM_SERVICE_ERR;
     }
+
+    if (opts->language == NULL)
+        opts->language = strdup("en");
+    if (opts->language == NULL) {
+        pam_syslog(pamh, LOG_CRIT, "malloc error 'opts->language': %m");
+        free_opts(opts);
+        free_locations(geo);
+        return PAM_SERVICE_ERR;
+    }
+    if (opts->debug)
+        pam_syslog(pamh, LOG_DEBUG, "DB language to used: %s", opts->language);
 
     retval = pam_get_item(pamh, PAM_USER, (void*) &username);
     if (username == NULL || retval != PAM_SUCCESS) {
@@ -211,7 +225,7 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
     }
     else {
         if (opts->is_city_db) {
-            retval = MMDB_get_value(&rec.entry, &entry_data, "city", "names", "en", NULL);
+            retval = MMDB_get_value(&rec.entry, &entry_data, "city", "names", opts->language, NULL);
             if (retval == MMDB_SUCCESS && entry_data.has_data && entry_data.type == MMDB_DATA_TYPE_UTF8_STRING && entry_data.data_size > 0)
                 geo->city = strndup(entry_data.utf8_string, entry_data.data_size);
             else

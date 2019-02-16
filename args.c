@@ -23,6 +23,10 @@ void _parse_args(pam_handle_t *pamh,
             if (argv[i][9])
                 opts->geoip_db = strndup(argv[i]+9, PATH_MAX);
         }
+        else if (strncmp(argv[i], "language=", 9) == 0) {
+            if (argv[i][9])
+                opts->language = strndup(argv[i]+9, LANG_MAX);
+        }
         else if (strncmp(argv[i], "v6_first=", 9) == 0) {
             pam_syslog(pamh, LOG_WARNING, "v6_first is not used anymore. geoip_db should support IPv6");
         }
