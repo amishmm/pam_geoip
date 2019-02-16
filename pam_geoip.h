@@ -9,7 +9,7 @@
 #define _PAM_GEOIP_H
 
 #define _GNU_SOURCE
-#define _BSD_SOURCE
+#define _DEFAULT_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,8 +20,7 @@
 #include <arpa/inet.h>
 #include <math.h>
 
-#include <GeoIP.h>
-#include <GeoIPCity.h>
+#include <maxminddb.h>
 
 #include "config.h"
 
@@ -44,18 +43,15 @@
 
 #define SYSTEM_FILE  "/etc/security/geoip.conf"
 #define SERVICE_FILE "/etc/security/geoip.%s.conf"
-#define GEOIPDB_FILE "/usr/local/share/GeoIP/GeoIPCity.dat"
-
-#ifdef HAVE_GEOIP_010408
-#define GEOIP6DB_FILE "/usr/local/share/GeoIP/GeoIPCityv6.dat"
-#endif
+#define GEOIPDB_FILE "/usr/share/GeoIP/GeoLite2-City.mmdb"
+#define GEOIP6DB_FILE "/usr/share/GeoIP/GeoLite2-City.mmdb"
 
 /* GeoIP locations in geoip.conf */
 struct locations {
     char *country;
     char *city;
-    float latitude;
-    float longitude;
+    double latitude;
+    double longitude;
     float radius;     /* in km */
     struct locations *next;
 };
@@ -64,17 +60,12 @@ struct locations {
 struct options {
     char *system_file;
     char *geoip_db;
-#ifdef HAVE_GEOIP_010408
     char *geoip6_db;
-#endif
     char *service_file; /* not on cmd line */
     int  by_service;    /* if service_file can be opened this is true */
-    int  charset;
     int  action;
-#ifdef HAVE_GEOIP_010408
     int  use_v6;
     int  v6_first;
-#endif
     int  is_city_db;
     int  debug;
 };
@@ -112,7 +103,7 @@ extern int
 check_service(pam_handle_t *pamh, char *services, char *srv);
 
 extern double
-calc_distance(float latitude, float longitude, float geo_lat, float geo_long);
+calc_distance(double latitude, double longitude, double geo_lat, double geo_long);
 
 
 extern int

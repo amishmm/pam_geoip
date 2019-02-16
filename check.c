@@ -36,7 +36,7 @@ int check_service(pam_handle_t *pamh, char *services, char *srv) {
 }
 
 double /* see also: http://en.wikipedia.org/wiki/Great-circle_distance */
-calc_distance(float latitude, float longitude, float geo_lat, float geo_long) {
+calc_distance(double latitude, double longitude, double geo_lat, double geo_long) {
     double distance;
     float earth = 6367.46; /* km avg radius */
     /* convert grad to rad: */

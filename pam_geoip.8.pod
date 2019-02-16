@@ -12,7 +12,7 @@ pam_geoip - GeoIP account management module for (Linux-)PAM
 =head1 SYNOPSIS
 
  account required pam_geoip.so [system_file=file] [geoip_db=file]
-        [charset=name] [action=name] [debug] [geoip6_db=file]
+        [action=name] [debug] [geoip6_db=file]
 	[use_v6=1] [v6_first=1]
 
 =head1 DESCRIPTION
@@ -96,11 +96,6 @@ Use IPv6 DB.
 =item v6_first=1
 
 Try resolving as IPv6 before trying as IPv4 hostname.
-
-=item charset=CHARSET
-
-The charset of the config file, defaults to C<UTF-8>. Other possible value
-is C<iso-8859-1> (case insensitive).
 
 =item action=ACTION
 

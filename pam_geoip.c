@@ -64,10 +64,8 @@ free_opts(struct options *opts) {
         free(opts->service_file);
     if (opts->geoip_db)
         free(opts->geoip_db);
-#ifdef HAVE_GEOIP_010408
     if (opts->geoip6_db)
         free(opts->geoip6_db);
-#endif
     free(opts);
 }
 
@@ -86,32 +84,29 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
     int retval, action;
     int is_v6 = 0;
     struct locations *geo;
-    unsigned char gi_type;
+    const char *gi_type;
 
-    GeoIP       *gi   = NULL;
-#ifdef HAVE_GEOIP_010408
-    GeoIP       *gi6  = NULL;
+    MMDB_s       gi;
+    MMDB_s       gi6;
     int is_city6_db   = 0;
-#endif
-    GeoIPRecord *rec  = NULL;
+    MMDB_lookup_result_s rec;
+    MMDB_entry_data_s entry_data;
+    int gai_error, mmdb_error;
 
     opts = malloc(sizeof(struct options));
     if (opts == NULL) {
         pam_syslog(pamh, LOG_CRIT, "malloc error 'opts': %m");
         return PAM_SERVICE_ERR;
     }
-    opts->charset      = GEOIP_CHARSET_UTF8;
     opts->debug        = 0;
     opts->action       = PAM_PERM_DENIED;
     opts->system_file  = NULL;
     opts->service_file = NULL;
     opts->by_service   = 0;
     opts->geoip_db     = NULL;
-#ifdef HAVE_GEOIP_010408
     opts->use_v6       = 0;
     opts->v6_first     = 0;
     opts->geoip6_db    = NULL;
-#endif
     opts->is_city_db   = 0;
 
     geo = malloc(sizeof(struct locations));
@@ -123,6 +118,8 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
     geo->country = NULL;
     geo->city    = NULL;
     geo->next    = NULL;
+    geo->latitude = 90.0;
+    geo->longitude = 0.0;
 
     _parse_args(pamh, argc, argv, opts);
 
@@ -131,6 +128,7 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
     if (opts->system_file == NULL) {
         pam_syslog(pamh, LOG_CRIT, "malloc error 'opts->system_file': %m");
         free_opts(opts);
+        free_locations(geo);
         return PAM_SERVICE_ERR;
     }
 
@@ -139,18 +137,18 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
     if (opts->geoip_db == NULL) {
         pam_syslog(pamh, LOG_CRIT, "malloc error 'opts->geoip_db': %m");
         free_opts(opts);
+        free_locations(geo);
         return PAM_SERVICE_ERR;
     }
 
-#ifdef HAVE_GEOIP_010408
     if (opts->geoip6_db == NULL)
         opts->geoip6_db = strdup(GEOIP6DB_FILE);
     if (opts->geoip6_db == NULL) {
         pam_syslog(pamh, LOG_CRIT, "malloc error 'opts->geoip6_db': %m");
         free_opts(opts);
+        free_locations(geo);
         return PAM_SERVICE_ERR;
     }
-#endif
 
     retval = pam_get_item(pamh, PAM_USER, (void*) &username);
     if (username == NULL || retval != PAM_SUCCESS) {
@@ -196,171 +194,134 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
         return PAM_SERVICE_ERR;
     }
 
-    gi = GeoIP_open(opts->geoip_db, GEOIP_INDEX_CACHE);
-    if (gi == NULL) {
+    retval = MMDB_open(opts->geoip_db, MMDB_MODE_MMAP, &gi);
+    if (retval != MMDB_SUCCESS) {
         pam_syslog(pamh, LOG_CRIT,
-                        "failed to open geoip db (%s): %m", opts->geoip_db);
+                        "failed to open geoip db (%s - %s): %m", opts->geoip_db, MMDB_strerror(retval));
         free_opts(opts);
         free_locations(geo);
         return PAM_SERVICE_ERR;
     }
-    gi_type = GeoIP_database_edition(gi);
+    gi_type = gi.metadata.database_type;
     if (opts->debug)
-        pam_syslog(pamh, LOG_DEBUG, "GeoIP edition: %d", gi_type);
-    switch (gi_type) {
-        case GEOIP_COUNTRY_EDITION:
-            if (opts->debug)
-                pam_syslog(pamh, LOG_DEBUG, "GeoIP v4 edition: country");
-            opts->is_city_db = 0;
-            break;
-        case GEOIP_CITY_EDITION_REV0:
-            if (opts->debug)
-                pam_syslog(pamh, LOG_DEBUG, "GeoIP v4 edition: city rev0");
-            opts->is_city_db = 1;
-            break;
-        case GEOIP_CITY_EDITION_REV1:
-            if (opts->debug)
-                pam_syslog(pamh, LOG_DEBUG, "GeoIP v4 edition: city rev1");
-            opts->is_city_db = 1;
-            break;
-        default:
-            pam_syslog(pamh, LOG_CRIT, "invalid GeoIP DB type `%d' found", gi_type);
-            GeoIP_delete(gi);
-            free_opts(opts);
-            free_locations(geo);
-            return PAM_SERVICE_ERR;
+        pam_syslog(pamh, LOG_DEBUG, "GeoIP database type: %s", gi_type);
+    if (gi_type == NULL || (strstr(gi_type, "Country") == NULL && strstr(gi_type, "City") == NULL)) {
+        pam_syslog(pamh, LOG_CRIT, "unsupported GeoIP DB type `%s' found", gi_type);
+        MMDB_close(&gi);
+        free_opts(opts);
+        free_locations(geo);
+        return PAM_SERVICE_ERR;
     }
-    GeoIP_set_charset(gi, opts->charset);
+    opts->is_city_db = strstr(gi_type, "City") ? 1 : 0;
     if (opts->debug)
         pam_syslog(pamh, LOG_DEBUG, "GeoIP DB is City: %s",
                                         opts->is_city_db ? "yes" : "no");
 
-#ifdef HAVE_GEOIP_010408
-    if (opts->use_v6 != 0) {
-        gi6 = GeoIP_open(opts->geoip6_db, GEOIP_INDEX_CACHE);
-        if (gi6 == NULL) {
+    if (opts->use_v6) {
+        retval = MMDB_open(opts->geoip6_db, MMDB_MODE_MMAP, &gi6);
+        if (retval != MMDB_SUCCESS) {
             pam_syslog(pamh, LOG_CRIT,
-                            "failed to open geoip6 db (%s): %m", opts->geoip6_db);
-            GeoIP_delete(gi);
+                            "failed to open geoip6 db (%s - %s): %m", opts->geoip6_db, MMDB_strerror(retval));
+            MMDB_close(&gi);
             free_opts(opts);
             free_locations(geo);
             return PAM_SERVICE_ERR;
         }
-        gi_type = GeoIP_database_edition(gi6);
-
-        switch (gi_type) {
-            case GEOIP_COUNTRY_EDITION_V6:
-                if (opts->debug)
-                    pam_syslog(pamh, LOG_DEBUG, "GeoIP v6 edition: country");
-                is_city6_db = 0;
-                break;
-            case GEOIP_CITY_EDITION_REV0_V6:
-                if (opts->debug)
-                    pam_syslog(pamh, LOG_DEBUG, "GeoIP v6 edition: city rev0");
-                is_city6_db = 1;
-                break;
-            case GEOIP_CITY_EDITION_REV1_V6:
-                if (opts->debug)
-                    pam_syslog(pamh, LOG_DEBUG, "GeoIP v6 edition: city rev1");
-                is_city6_db = 1;
-                break;
-            default:
-                pam_syslog(pamh, LOG_CRIT, "invalid GeoIP DB type `%d' found", gi_type);
-                GeoIP_delete(gi);
-                GeoIP_delete(gi6);
-                free_opts(opts);
-                free_locations(geo);
-                return PAM_SERVICE_ERR;
-        }
+        gi_type = gi6.metadata.database_type;
         if (opts->debug)
-            pam_syslog(pamh, LOG_DEBUG, "GeoIP DB is City v6: %s",
+            pam_syslog(pamh, LOG_DEBUG, "GeoIP6 database type: %s", gi_type);
+        if (gi_type == NULL || (strstr(gi_type, "Country") == NULL && strstr(gi_type, "City") == NULL)) {
+            pam_syslog(pamh, LOG_CRIT, "unsupported GeoIP6 DB type `%s' found", gi_type);
+            MMDB_close(&gi);
+            MMDB_close(&gi6);
+            free_opts(opts);
+            free_locations(geo);
+            return PAM_SERVICE_ERR;
+        }
+        is_city6_db = strstr(gi_type, "City") ? 1 : 0;
+        if (opts->debug)
+            pam_syslog(pamh, LOG_DEBUG, "GeoIP6 DB is City v6: %s",
                 is_city6_db ? "yes" : "no");
-        GeoIP_set_charset(gi6, opts->charset);
 
         if (opts->is_city_db != is_city6_db) {
-            pam_syslog(pamh, LOG_CRIT, "IPv4 DB type is not the same as IPv6 (not both Country edition or both City edition)");
-            GeoIP_delete(gi);
-            GeoIP_delete(gi6);
+            pam_syslog(pamh, LOG_CRIT, "IPv4 DB type is not the same as IPv6 (City or Country)");
+            MMDB_close(&gi);
+            MMDB_close(&gi6);
             free_opts(opts);
             free_locations(geo);
             return PAM_SERVICE_ERR;
         }
 
-        if (opts->v6_first != 0) {
-            rec = GeoIP_record_by_name_v6(gi6, rhost);
-            if (rec == NULL) {
+        if (opts->v6_first) {
+            rec = MMDB_lookup_string(&gi6, rhost, &gai_error, &mmdb_error);
+            if (gai_error || mmdb_error != MMDB_SUCCESS || !rec.found_entry) {
                 if (opts->debug)
                     pam_syslog(pamh, LOG_DEBUG, "no IPv6 record for %s, trying IPv4", rhost);
-                rec = GeoIP_record_by_name(gi, rhost);
+                rec = MMDB_lookup_string(&gi, rhost, &gai_error, &mmdb_error);
             }
             else
                 is_v6 = 1;
         }
         else {
-            rec = GeoIP_record_by_name(gi, rhost);
-            if (rec == NULL) {
+            rec = MMDB_lookup_string(&gi, rhost, &gai_error, &mmdb_error);
+            if (gai_error || mmdb_error != MMDB_SUCCESS || !rec.found_entry) {
                 if (opts->debug)
                     pam_syslog(pamh, LOG_DEBUG, "no IPv4 record for %s, trying IPv6", rhost);
-                rec = GeoIP_record_by_name_v6(gi6, rhost);
-                if (rec != NULL)
+                rec = MMDB_lookup_string(&gi6, rhost, &gai_error, &mmdb_error);
+                if (!gai_error && mmdb_error == MMDB_SUCCESS && rec.found_entry)
                     is_v6 = 1;
             }
         }
     }
     else
-#endif /* HAVE_GEOIP_010408 */
-        rec = GeoIP_record_by_name(gi, rhost);
+        rec = MMDB_lookup_string(&gi, rhost, &gai_error, &mmdb_error);
 
-    if (rec == NULL) {
-        pam_syslog(pamh, LOG_INFO, "no record for %s, setting GeoIP to 'UNKNOWN,*'", rhost);
-
+    if (gai_error || mmdb_error != MMDB_SUCCESS || !rec.found_entry) {
+        pam_syslog(pamh, LOG_INFO, "no record detected for %s, setting GeoIP to 'UNKNOWN,*'", rhost);
         geo->city    = strdup("*");
         geo->country = strdup("UNKNOWN");
-
-        if (geo->city == NULL || geo->country == NULL) {
-            pam_syslog(pamh, LOG_CRIT, "malloc error 'geo->{city,country}': %m");
-            GeoIP_delete(gi);
-#ifdef HAVE_GEOIP_010408
-            GeoIP_delete(gi6);
-#endif
-            free_opts(opts);
-            free_locations(geo);
-            return PAM_SERVICE_ERR;
-        }
     }
     else {
-        if (rec->city == NULL || opts->is_city_db == 0)
-            geo->city = strdup("*");
-        else
-            geo->city = strdup(rec->city);
-
-        if (rec->country_code == NULL)
-            geo->country = strdup("UNKNOWN");
-        else
-            geo->country = strdup(rec->country_code);
-
-        if (geo->city == NULL || geo->country == NULL) {
-            pam_syslog(pamh, LOG_CRIT, "malloc error 'geo->{city,country}': %m");
-            GeoIP_delete(gi);
-#ifdef HAVE_GEOIP_010408
-            GeoIP_delete(gi6);
-#endif
-            free_opts(opts);
-            free_locations(geo);
-            return PAM_SERVICE_ERR;
-        }
-
         if (opts->is_city_db) {
-            geo->latitude  = rec->latitude;
-            geo->longitude = rec->longitude;
+            retval = MMDB_get_value(&rec.entry, &entry_data, "city", "names", "en", NULL);
+            if (retval == MMDB_SUCCESS && entry_data.has_data && entry_data.type == MMDB_DATA_TYPE_UTF8_STRING && entry_data.data_size > 0)
+                geo->city = strndup(entry_data.utf8_string, entry_data.data_size);
+            else
+                geo->city = strdup("*");
+
+            retval = MMDB_get_value(&rec.entry, &entry_data, "location", "latitude", NULL);
+            if (retval == MMDB_SUCCESS && entry_data.has_data && entry_data.type == MMDB_DATA_TYPE_DOUBLE)
+                geo->latitude = entry_data.double_value;
+
+            retval = MMDB_get_value(&rec.entry, &entry_data, "location", "longitude", NULL);
+            if (retval == MMDB_SUCCESS && entry_data.has_data && entry_data.type == MMDB_DATA_TYPE_DOUBLE)
+                geo->longitude = entry_data.double_value;
         }
+        else
+            geo->city = strdup("*");
+
+        retval = MMDB_get_value(&rec.entry, &entry_data, "country", "iso_code", NULL);
+        if (retval == MMDB_SUCCESS && entry_data.has_data && entry_data.type == MMDB_DATA_TYPE_UTF8_STRING && entry_data.data_size > 0)
+            geo->country = strndup(entry_data.utf8_string, entry_data.data_size);
+        else
+            geo->country = strdup("UNKNOWN");
+    }
+
+    MMDB_close(&gi);
+    MMDB_close(&gi6);
+
+    if (geo->city == NULL || geo->country == NULL) {
+        pam_syslog(pamh, LOG_CRIT, "malloc error 'geo->{city,country}': %m");
+        free_opts(opts);
+        free_locations(geo);
+        return PAM_SERVICE_ERR;
     }
 
     if (opts->debug)
         pam_syslog(pamh, LOG_DEBUG, "GeoIP record for %s: %s,%s",
                                 rhost, geo->country, geo->city);
 
-    if (opts->debug && strcmp(geo->country, "UNKNOWN") != 0 && opts->is_city_db)
+    if (opts->debug && strcmp(geo->country, "UNKNOWN") && opts->is_city_db)
         pam_syslog(pamh, LOG_DEBUG, "GeoIP coordinates for %s: %f,%f",
                                     rhost, geo->latitude, geo->longitude);
 
@@ -370,18 +331,11 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
             pam_syslog(pamh, LOG_DEBUG, "using services file %s",
                                         opts->service_file);
     }
-    else {
-        if ((fh = fopen(opts->system_file, "r")) == NULL) {
-            pam_syslog(pamh, LOG_CRIT, "error opening %s: %m", opts->system_file);
-
-#ifdef HAVE_GEOIP_010408
-            if (gi6) GeoIP_delete(gi6);
-#endif
-            if (gi) GeoIP_delete(gi);
-            if (rec) GeoIPRecord_delete(rec);
-            free_opts(opts);
-            return PAM_SERVICE_ERR;
-        }
+    else if ((fh = fopen(opts->system_file, "r")) == NULL) {
+        pam_syslog(pamh, LOG_CRIT, "error opening %s: %m", opts->system_file);
+        free_opts(opts);
+        free_locations(geo);
+        return PAM_SERVICE_ERR;
     }
 
     action = opts->action;
@@ -406,7 +360,7 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
         if (ptr)
             *ptr = '\0';
         /* Anything left ? */
-        if (!strlen(line))
+        if (!line[0])
             continue;
 
         if (opts->by_service)
@@ -423,7 +377,7 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
                 continue;
         }
 
-        if ((strcmp(domain, "*") == 0) || (strcmp(username, domain) == 0)) {
+        if (!strcmp(domain, "*") || !strcmp(username, domain)) {
             if (check_location(pamh, opts, location, geo))
                 break;
         }
@@ -436,11 +390,6 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
     }
 
     fclose(fh);
-    if (gi) GeoIP_delete(gi);
-#ifdef HAVE_GEOIP_010408
-    if (gi6) GeoIP_delete(gi6);
-#endif
-    if (rec) GeoIPRecord_delete(rec);
     free_locations(geo);
 
     switch (action) {

@@ -17,8 +17,8 @@ parse_locations(pam_handle_t *pamh,
     char *single, *end, *next;
     char *country, *city;
     char *string = strdup(location_string);
-    float latitude;
-    float longitude;
+    double latitude;
+    double longitude;
     float radius;
 
     single = string;
@@ -52,10 +52,10 @@ parse_locations(pam_handle_t *pamh,
             continue;
         }
 
-        if (sscanf(single, "%f { %f , %f }", &radius, &latitude, &longitude)
+        if (sscanf(single, "%f { %lf , %lf }", &radius, &latitude, &longitude)
             == 3)
         {
-            if (fabsf(latitude) > 90.0 || fabsf(longitude) > 180.0) {
+            if (fabs(latitude) > 90.0 || fabs(longitude) > 180.0) {
                 pam_syslog(pamh, LOG_WARNING,
                         "illegal value(s) in LAT/LONG: %f, %f",
                         latitude, longitude);
