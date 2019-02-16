@@ -82,14 +82,7 @@ extern int
 parse_action(pam_handle_t *pamh, char *name);
 
 extern int
-parse_line_srv(pam_handle_t *pamh,
-           char *line,
-           char *domain,
-           char *location);
-
-
-extern int
-parse_line_sys(pam_handle_t *pamh,
+parse_conf_line(pam_handle_t *pamh,
            char *line,
            char *domain,
            char *service,

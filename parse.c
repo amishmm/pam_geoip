@@ -16,10 +16,15 @@ parse_locations(pam_handle_t *pamh,
     struct locations *list   = NULL;
     char *single, *end, *next;
     char *country, *city;
-    char *string = strdup(location_string);
+    char *string = strdup(location_string ? location_string : "");
     double latitude;
     double longitude;
     float radius;
+
+    if (string == NULL) {
+        pam_syslog(pamh, LOG_CRIT, "failed to strdup: %m");
+        return NULL;
+    }
 
     single = string;
     while (*single) {
@@ -52,9 +57,7 @@ parse_locations(pam_handle_t *pamh,
             continue;
         }
 
-        if (sscanf(single, "%f { %lf , %lf }", &radius, &latitude, &longitude)
-            == 3)
-        {
+        if (sscanf(single, "%f { %lf , %lf }", &radius, &latitude, &longitude) == 3) {
             if (fabs(latitude) > 90.0 || fabs(longitude) > 180.0) {
                 pam_syslog(pamh, LOG_WARNING,
                         "illegal value(s) in LAT/LONG: %f, %f",
@@ -93,6 +96,7 @@ parse_locations(pam_handle_t *pamh,
         entry = malloc(sizeof(struct locations));
         if (entry == NULL) {
             pam_syslog(pamh, LOG_CRIT, "failed to malloc: %m");
+            free(string);
             return NULL;
         }
         entry->next    = NULL;
@@ -109,28 +113,25 @@ parse_locations(pam_handle_t *pamh,
             if (entry->country == NULL) {
                 pam_syslog(pamh, LOG_CRIT, "failed to malloc: %m");
                 free(entry);
+                free(string);
                 return NULL;
             }
 
             entry->city = strdup(city);
             if (entry->city == NULL) {
                 pam_syslog(pamh, LOG_CRIT, "failed to malloc: %m");
+                free(entry->country);
                 free(entry);
+                free(string);
                 return NULL;
             }
         }
 
-        if (list == NULL)
-            list = entry;
-        else {
-            walker = list;
-            while (walker->next)
-                walker = walker->next;
-            walker->next = entry;
-        }
+        if (list == NULL) list = entry;
+        else walker->next = entry;
+        walker = entry;
     }
-    if (string)
-        free(string); /* strdup'd */
+    free(string);
     return list;
 }
 
@@ -149,31 +150,7 @@ int parse_action(pam_handle_t *pamh, char *name) {
 }
 
 int
-parse_line_srv(pam_handle_t *pamh,
-           char *line,
-           char *domain,
-           char *location)
-{
-    char *str;
-    char action[LINE_LENGTH+1];
-
-    if (sscanf(line, "%s %s %[^\n]", domain, action, location) != 3)
-    {
-        pam_syslog(pamh, LOG_WARNING, "invalid line '%s' - skipped", line);
-        return -1;
-    }
-    /* remove white space from the end */
-    str = location + strlen(location) - 1;
-    while (isspace(*str)) {
-            *str = '\0';
-            str--;
-    }
-
-    return parse_action(pamh, action);
-}
-
-int
-parse_line_sys(pam_handle_t *pamh,
+parse_conf_line(pam_handle_t *pamh,
            char *line,
            char *domain,
            char *service,
@@ -182,8 +159,9 @@ parse_line_sys(pam_handle_t *pamh,
     char *str;
     char action[LINE_LENGTH+1];
 
-    if (sscanf(line, "%s %s %s %[^\n]", domain, service, action, location) != 4)
-    {
+    if ((service && sscanf(line, "%s %s %s %[^\n]", domain, service, action, location) != 4) ||
+        (!service && sscanf(line, "%s %s %[^\n]", domain, action, location) != 3)
+       ) {
         pam_syslog(pamh, LOG_WARNING, "invalid line '%s' - skipped", line);
         return -1;
     }

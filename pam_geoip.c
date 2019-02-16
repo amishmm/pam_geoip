@@ -290,10 +290,7 @@ pam_sm_acct_mgmt(pam_handle_t *pamh,
         if (!line[0])
             continue;
 
-        if (opts->by_service)
-            action = parse_line_srv(pamh, line, domain, location);
-        else
-            action = parse_line_sys(pamh, line, domain, service, location);
+        action = parse_conf_line(pamh, line, domain, opts->by_service ? NULL : service, location);
         if (action < 0) { /* parsing failed */
             action = opts->action;
             continue;
