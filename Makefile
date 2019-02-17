@@ -1,4 +1,3 @@
-
 POD2MAN=pod2man -u -c ' ' -r ' '
 MANPAGES=geoip.conf.5 pam_geoip.8
 MAN_5_POD=geoip.conf.5.pod
@@ -14,7 +13,6 @@ PAM_LIB_DIR=$(DESTDIR)/lib/$(MULTIARCH)/security
 INSTALL=/usr/bin/install
 
 all: pam_geoip.so doc
-
 doc: $(MANPAGES_POD) $(MANPAGES) 
 
 %.5: $(MAN_5_POD)

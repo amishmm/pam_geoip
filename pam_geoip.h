@@ -19,22 +19,14 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <math.h>
-
 #include <maxminddb.h>
-
-#define LINE_LENGTH 4095
-
-#define MASK_NO_MASK  -1
-#define MASK_TOO_LONG -2
-#define MASK_NOT_NUM  -3
-#define MASK_TOO_BIG  -4
-
 #include <security/pam_modutil.h> /* pam_modutil_user_in_group_nam_nam() */
 #include <security/pam_ext.h>     /* pam_syslog() */
 #include <security/pam_appl.h>
 #define PAM_SM_ACCOUNT
 #include <security/pam_modules.h>
 
+#define LINE_LENGTH 4095
 #ifndef PATH_MAX
 # define PATH_MAX 1024
 #endif /* PATH_MAX */
@@ -69,48 +61,18 @@ struct options {
     char *language;
 };
 
-extern struct locations *
-parse_locations(pam_handle_t *pamh,
-                struct options *opts,
-                char *location_string);
-
-
-extern void
-free_locations(struct locations *list);
-
-extern void
-free_opts(struct options *opts);
-
-extern int
-parse_action(pam_handle_t *pamh, char *name);
-
-extern int
-parse_conf_line(pam_handle_t *pamh,
-           char *line,
-           char *domain,
-           char *service,
-           char *location);
-
-extern int
-check_service(pam_handle_t *pamh, char *services, char *srv);
-
-extern double
-calc_distance(double latitude, double longitude, double geo_lat, double geo_long);
-
-
-extern int
-check_location(pam_handle_t *pamh,
-               struct options *opts,
-               char *location_string,
-               struct locations *geo);
-
-extern void
-_parse_args(pam_handle_t *pamh,
-             int argc,
-             const char **argv,
-             struct options *opts);
+extern struct locations *parse_locations(pam_handle_t *pamh, struct options *opts, char *location_string);
+extern void free_locations(struct locations *list);
+extern void free_opts(struct options *opts);
+extern int parse_action(pam_handle_t *pamh, char *name);
+extern int parse_conf_line(pam_handle_t *pamh, char *line, char *domain, char *service, char *location);
+extern int check_service(pam_handle_t *pamh, char *services, char *srv);
+extern double calc_distance(double latitude, double longitude, double geo_lat, double geo_long);
+extern int check_location(pam_handle_t *pamh, struct options *opts, char *location_string, struct locations *geo);
+extern void _parse_args(pam_handle_t *pamh, int argc, const char **argv, struct options *opts);
 
 #endif /* _PAM_GEOIP_H */
+
 /*
  * vim: ts=4 sw=4 expandtab
  */
